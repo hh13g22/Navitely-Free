@@ -208,6 +208,8 @@ const NO_PROVIDER_RE = /\bNo AI provider configured\b/;
 export function accountOrSetupUserMessage(err: unknown): string | null {
   if (!err) return null;
   const msg = String((err as { message?: unknown })?.message ?? err ?? '');
+  // ClaudeCodeCliService writes its own user-facing sentence; show it as-is.
+  if (msg.startsWith('Claude Code CLI:')) return msg;
   if (TRIAL_ENDED_RE.test(msg)) return 'Your free trial has ended. Pick a plan or add your own keys to keep getting answers.';
   const natively = NATIVELY_SOURCE_RE.test(msg);
   if (natively && NATIVELY_PLAN_LIMIT_RE.test(msg)) return "You've reached your Natively plan's limit. See Settings › Plans to keep getting answers.";
