@@ -78,6 +78,7 @@ import { TRIAL_SENTINEL_KEY } from './config/constants';
 import { emitNativelyPlanLimit, nativelyLimitErrorMessage } from './llm/nativelyPlanLimitEvents';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
+import { ClaudeCodeCliService } from './services/ClaudeCodeCliService';
 import { chatGptCompatibleModel, CodexCliConfig, CodexCliService, codexSignedOutMessage, DEFAULT_CODEX_CLI_CONFIG, getCodexAuthStatus } from './services/CodexCliService';
 import { AntigravityService } from './services/AntigravityService';
 import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone, groqReasoningParams } from './llm/groqModels';
@@ -1395,6 +1396,7 @@ export class LLMHelper {
     ninerouter: 'ninerouter',
     agentrouter: 'agentrouter',
     antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
+    claudecode: 'claudecode',
   };
 
   /**
@@ -2829,6 +2831,20 @@ export class LLMHelper {
 
   private isAntigravityModel(model: string): boolean { return model.startsWith('antigravity:'); }
 
+  private isClaudeCodeModel(model: string): boolean { return model === 'claudecode'; }
+
+  /** The user's local `claude` CLI, one continuous session (ClaudeCodeCliService). A cloud provider: scopes apply. */
+  private async *streamWithClaudeCode(userContent: string, systemPrompt?: string, imagePaths?: string[], signal?: AbortSignal): AsyncGenerator<string> {
+    if (this.isLocalOnlyMode) throw new Error('Claude Code CLI: cloud providers are disabled in local-only mode.');
+    this.assertOutboundScopes('claudecode', userContent, imagePaths);
+    const images = [];
+    for (const imagePath of imagePaths || []) {
+      signal?.throwIfAborted();
+      images.push(await this.processImage(imagePath));
+    }
+    yield* ClaudeCodeCliService.getInstance().stream({ text: userContent, systemPrompt, images, signal });
+  }
+
   private getAntigravityModelId(model: string): string { return model.replace(/^antigravity:/, ''); }
 
   private async *streamWithAntigravity(userPrompt: string, systemPrompt?: string, imagePaths?: string[], signal?: AbortSignal, model = this.currentModelId, direct = false): AsyncGenerator<string> {
@@ -3007,6 +3023,8 @@ export class LLMHelper {
     if (targetModelId === GEMINI_FLASH_MODEL) this.geminiModel = GEMINI_FLASH_MODEL;
 
     console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
+    // Start the CLI session now so the first answer skips the ~1.3 s spawn.
+    if (this.isClaudeCodeModel(targetModelId)) ClaudeCodeCliService.getInstance().warm();
     // Keep OpenRouter's "which models read images" answers current (2026-10-01).
     if (this.isOpenRouterModel(targetModelId)) void this.refreshOpenRouterVisionData();
     // …and, when nothing says whether this model reads images, test it once.
@@ -3053,7 +3071,7 @@ export class LLMHelper {
     // A Background Model answer is not wrapped in the engine (the fast block
     // runs before every rung), so a stalled one needs the caller's regeneration.
     if (this.fastPickForTextTurn()) return false;
-    if (this.useOllama || this.isUsingCodexCli()) return false;
+    if (this.useOllama || this.isUsingCodexCli() || this.isUsingClaudeCode()) return false;
     if (this.activeCurlProvider) return false;      // branch 2b: blocking, terminal
     return this.activeModelIsUserEndpoint();
   }
@@ -5201,6 +5219,12 @@ let isMultimodal = !!(imagePaths?.length);
       // System prompts for OpenAI/Claude/Codex CLI (skipped if skipSystemPrompt)
       const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
       const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || CLAUDE_SYSTEM_PROMPT);
+
+      if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isClaudeCodeModel(this.currentModelId)) {
+        let text = '';
+        for await (const chunk of this.streamWithClaudeCode(cloudUserContent, openaiSystemPrompt, cloudImagePaths)) text += chunk;
+        return text;
+      }
 
       if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
         let text = '';
@@ -11316,6 +11340,13 @@ let isMultimodal = !!(imagePaths?.length);
     markH4Stage('provider_dispatch_start', { model: this.currentModelId });
     _stage(`provider dispatch START (sysPrompt=${finalSystemPrompt.length}c, userContent=${userContent.length}c, model=${this.currentModelId})`);
 
+    // Claude Code CLI: terminal, before the vision chain and the Fast Response
+    // pick, so a turn the user gave this provider is never answered by another.
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isClaudeCodeModel(this.currentModelId)) {
+      yield* this.streamWithClaudeCode(userContent, finalSystemPrompt, imagePaths, abortSignal);
+      return;
+    }
+
     if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
       // Selected-provider text turn (2026-09-07): this was the one remaining
       // bare terminal rung. Measured on the live What-To-Answer path with
@@ -14038,6 +14069,11 @@ let isMultimodal = !!(imagePaths?.length);
    * call was raced against the 7s cloud cap and aborted to the canned fallback
    * ("Let me come back to that in just a moment."). Mirrors isUsingOllama().
    */
+  /** Claude Code CLI turns get the long local first-token budget (cold session, long prompts). */
+  public isUsingClaudeCode(): boolean {
+    return !this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isClaudeCodeModel(this.currentModelId);
+  }
+
   public isUsingCodexCli(): boolean {
     // With Fast Response answering a text turn on a Background Model or an Auto
     // candidate, the turn is a Codex turn only when that pick IS Codex. A
@@ -14230,7 +14266,7 @@ let isMultimodal = !!(imagePaths?.length);
       : (() => { try { return this.getCurrentProvider(); } catch { return 'unknown'; } })();
     const route = (() => {
       if (pick) return this.fastPickRoute(pick.family);
-      if (this.isUsingOllama() || this.isUsingCodexCli()) return 'local' as const;
+      if (this.isUsingOllama() || this.isUsingCodexCli() || this.isUsingClaudeCode()) return 'local' as const;
       const nativelyCascade = this.currentModelId === 'natively';
       if (hasImages && !nativelyCascade) return 'vision' as const;
       if (nativelyCascade) return 'server_cascade' as const;
