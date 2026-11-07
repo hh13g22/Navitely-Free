@@ -14,13 +14,11 @@ test('the Natively API plans carry no fixed struck price', () => {
   assert.doesNotMatch(read('src/components/settings/NativelyApiSettings.tsx'), /\bwasPrice\s*:/);
 });
 
-test('every struck price on the in-panel plans page depends on a sale window', () => {
+// Local build: the in-panel plans page is gone (replaced by "Your Context"),
+// so there is no struck price anywhere on it — the strongest form of the rule.
+test('the in-panel plans page carries no struck price at all', () => {
   const rel = 'src/components/upgrade/UnlockProPlans.tsx';
   if (!fs.existsSync(path.join(REPO, rel))) return;
-  const src = read(rel);
-  const wases = [...src.matchAll(/\bwas:\s*([^,\n]+)/g)].map((m) => m[1].trim()).filter((w) => !/^string\b/.test(w)); // skip the type
-  assert.ok(wases.length > 0);
-  for (const w of wases) {
-    assert.ok(w === 'null' || /sale\w*\s*\?/i.test(w), `struck price not tied to a sale: was: ${w}`);
-  }
+  const wases = [...read(rel).matchAll(/\bwas:\s*([^,\n]+)/g)].map((m) => m[1].trim()).filter((w) => !/^string\b/.test(w));
+  assert.equal(wases.length, 0);
 });

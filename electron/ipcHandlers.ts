@@ -7518,6 +7518,39 @@ export function initializeIpcHandlers(appState: AppState): void {
     app.quit();
   });
 
+  // The user's own Claude Code context file (claudeCodeContext.ts): a plain
+  // markdown doc in userData the "Your Context" panel reads/writes, and
+  // LLMHelper prepends to every Claude Code answer. No license, no server.
+  const claudeContextPath = () => {
+    const { CLAUDE_CODE_CONTEXT_FILE } = require('./services/claudeCodeContext') as typeof import('./services/claudeCodeContext');
+    return path.join(app.getPath('userData'), CLAUDE_CODE_CONTEXT_FILE);
+  };
+  safeHandle('claude-context:get', () => {
+    try { return { text: fs.readFileSync(claudeContextPath(), 'utf8') }; }
+    catch { return { text: '' }; }
+  });
+  safeHandle('claude-context:set', (_e, text: unknown) => {
+    try {
+      fs.writeFileSync(claudeContextPath(), typeof text === 'string' ? text : '');
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'write failed' };
+    }
+  });
+  safeHandle('claude-context:open', async () => {
+    const p = claudeContextPath();
+    try {
+      if (!fs.existsSync(p)) {
+        const { CLAUDE_CODE_CONTEXT_TEMPLATE } = require('./services/claudeCodeContext') as typeof import('./services/claudeCodeContext');
+        fs.writeFileSync(p, CLAUDE_CODE_CONTEXT_TEMPLATE);
+      }
+      const err = await shell.openPath(p);
+      return err ? { success: false, error: err } : { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'open failed' };
+    }
+  });
+
   // Generic "restart now" action for banners that need a fresh process —
   // e.g. macOS Screen Recording grants often don't take effect in an
   // already-running process until the app is relaunched.

@@ -180,6 +180,11 @@ interface ElectronAPI {
 
   analyzeImageFile: (path: string) => Promise<void>;
   quitApp: () => Promise<void>;
+
+  /** The user's own Claude Code context file (bio / résumé / target job). */
+  getClaudeContext: () => Promise<{ text: string }>;
+  saveClaudeContext: (text: string) => Promise<{ success: boolean; error?: string }>;
+  openClaudeContext: () => Promise<{ success: boolean; error?: string }>;
   restartApp: () => Promise<void>;
 
   // LLM Model Management
@@ -1764,6 +1769,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   analyzeImageFile: (path: string) => ipcRenderer.invoke('analyze-image-file', path),
   quitApp: () => ipcRenderer.invoke('quit-app'),
+
+  getClaudeContext: () => ipcRenderer.invoke('claude-context:get'),
+  saveClaudeContext: (text: string) => ipcRenderer.invoke('claude-context:set', text),
+  openClaudeContext: () => ipcRenderer.invoke('claude-context:open'),
   restartApp: () => ipcRenderer.invoke('restart-app'),
   toggleWindow: () => ipcRenderer.invoke('toggle-window'),
   showWindow: (inactive?: boolean) => ipcRenderer.invoke('show-window', inactive),

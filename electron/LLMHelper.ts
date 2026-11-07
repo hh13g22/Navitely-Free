@@ -2842,7 +2842,22 @@ export class LLMHelper {
       signal?.throwIfAborted();
       images.push(await this.processImage(imagePath));
     }
-    yield* ClaudeCodeCliService.getInstance().stream({ text: userContent, systemPrompt, images, signal });
+    // The user's own interview context (about-you / résumé / job), read fresh so
+    // an edit takes effect next answer, prepended to the mode's system prompt.
+    const ctx = this.claudeCodeContext();
+    const sys = ctx ? (systemPrompt ? `${ctx}\n\n${systemPrompt}` : ctx) : systemPrompt;
+    yield* ClaudeCodeCliService.getInstance().stream({ text: userContent, systemPrompt: sys, images, signal });
+  }
+
+  /** The user's context block for Claude Code (claudeCodeContext.ts), or '' when unset. */
+  private claudeCodeContext(): string {
+    try {
+      const { app } = require('electron') as typeof import('electron');
+      const { readClaudeCodeContextFile, CLAUDE_CODE_CONTEXT_FILE } = require('./services/claudeCodeContext') as typeof import('./services/claudeCodeContext');
+      return readClaudeCodeContextFile(path.join(app.getPath('userData'), CLAUDE_CODE_CONTEXT_FILE));
+    } catch {
+      return '';
+    }
   }
 
   /**

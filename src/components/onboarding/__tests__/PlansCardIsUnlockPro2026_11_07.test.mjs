@@ -19,7 +19,11 @@ test('the startup Plans card renders the Unlock Pro page', () => {
   assert.doesNotMatch(card, /NativelyApiSettings/, 'no second copy of the API plans');
 });
 
-test('the host sends "I have a license" to Settings › Plans & Billing', () => {
+// Local build: the startup plans popup is disabled. The host keeps the card's
+// slot in the scheduler (pacing unchanged) but renders nothing for it and
+// retires it at once, so no pricing popup appears on launch.
+test('the host does not render the plans popup; it retires the slot', () => {
   const host = read('src/components/onboarding/OrchestratedToasterHost.tsx');
-  assert.match(host, /<PlansToaster[^>]*onOpenPlans=\{\(\) => openSettings\('plans'\)\}/);
+  assert.doesNotMatch(host, /<PlansToaster/, 'no plans popup is rendered');
+  assert.match(host, /case 'plans':[\s\S]*<SelfDismiss onMount=\{\(\) => closeWith\('plans'\)\(\)\}/, 'the plans slot self-dismisses');
 });

@@ -57,21 +57,12 @@ test('quota banner: no hardcoded checkout, plans open in Settings, trials stay o
   assert.ok(bannerCode.includes("'Packs do not reset'"), 'a pack is not promised a billing-date reset');
 });
 
-test('Unlock Pro: still three cards, each a checkout from CHECKOUT_URLS or PLANS', () => {
-  const ids = [...unlockCode.matchAll(/^\s*id: ('pack_light'|apiPro\.id|'pro_yearly'),/gm)].map((m) => m[1]);
-  assert.deepEqual(ids, ["'pack_light'", 'apiPro.id', "'pro_yearly'"]);
-  assert.doesNotMatch(unlockCode, /pdt_0N/, 'no product id on the page');
-});
-
-test('Unlock Pro: the Heavy pack and API Pro yearly as quiet second offers', () => {
-  assert.ok(unlockCode.includes("alt: { id: heavy.id, label: `or ${heavy.hours} hours for $${heavy.price}`, url: CHECKOUT_URLS.packHeavy }"));
-  assert.ok(unlockCode.includes("alt: { id: `${apiPro.id}_yearly`, label: `or ${apiPro.yearlyPrice}/yr, ${YEARLY_MONTHS_FREE} months free`, url: apiPro.yearlyUrl }"));
-  assert.ok(unlockCode.includes('alt: null,'), 'Pro Yearly has no second offer');
-  // Same checkout path as the main buttons: the paywall's surface, the same
-  // "opened" callback, so the funnel and the startup card see it.
-  assert.ok(unlockCode.includes('onClick={() => choose(alt.id, alt.url)}'));
-  assert.ok(unlockCode.includes('onClick={() => choose(tier.id, tier.url)}'));
-  assert.ok(unlockCode.includes('api.openExternal(url, { surface })'));
-  const choose = unlockCode.slice(unlockCode.indexOf('const choose'), unlockCode.indexOf('const iconBtn'));
-  assert.ok(choose.includes('await openUrl(url)') && choose.includes('onCheckoutOpened?.(id)'));
+// Local build: the "Unlock Pro" surface no longer sells anything — it renders
+// the user's own "Your Context" panel. So the page carries no checkout cards,
+// product ids or prices, and delegates to ClaudeContextPanel.
+test('Unlock Pro surface sells nothing: no cards, no checkout, no prices', () => {
+  assert.ok(unlockCode.includes('ClaudeContextPanel'), 'renders the context panel');
+  assert.doesNotMatch(unlockCode, /pdt_0N|checkout\.dodopayments|CHECKOUT_URLS/, 'no checkout links');
+  assert.doesNotMatch(unlockCode, /^\s*id: ('pack_light'|apiPro\.id|'pro_yearly'),/gm, 'no plan cards');
+  assert.doesNotMatch(unlockCode, /\$\d|onCheckoutOpened\?\.\(/, 'no prices or checkout callback use');
 });

@@ -17,6 +17,7 @@ const root = path.resolve(__dirname, '../../..');
 const dist = (p) => pathToFileURL(path.join(root, 'dist-electron/electron', p)).href;
 const { parseLine, buildSpawn, ClaudeCodeCliService } = await import(dist('services/ClaudeCodeCliService.js'));
 const { accountOrSetupUserMessage } = await import(dist('llm/providerErrorClassifier.js'));
+const { claudeCodeContextBlock, readClaudeCodeContextFile } = await import(dist('services/claudeCodeContext.js'));
 
 const TEXT = '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}},"session_id":"s"}';
 const THINK = '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":""}},"session_id":"s"}';
@@ -198,6 +199,30 @@ test("a stopped session's late exit does not fail its replacement's turn", async
   old.emit('exit', null, 'SIGTERM');
   children[1].say(TEXT, OK);
   assert.equal(await p, 'OK');
+});
+
+test('context block wraps real text and ignores empty / scaffold-only files', () => {
+  assert.equal(claudeCodeContextBlock(''), '');
+  assert.equal(claudeCodeContextBlock('   \n  '), '');
+  // Headings + HTML comments only (the untouched template) → treated as unset.
+  assert.equal(claudeCodeContextBlock('# My context\n## About me\n<!-- fill in -->'), '');
+  const out = claudeCodeContextBlock('## About me\nStaff engineer, 8 years.');
+  assert.match(out, /^<my_context>/);
+  assert.match(out, /Staff engineer, 8 years\./);
+  assert.match(out, /<\/my_context>$/);
+});
+
+test('reading a missing context file yields empty, not a throw', async () => {
+  const os = await import('node:os');
+  const fs = await import('node:fs');
+  assert.equal(readClaudeCodeContextFile(path.join(os.tmpdir(), 'does-not-exist-xyz.md')), '');
+  const f = path.join(os.tmpdir(), `ctx-${Date.now()}.md`);
+  fs.writeFileSync(f, '## The job\nStaff role at Acme.');
+  try {
+    assert.match(readClaudeCodeContextFile(f), /Staff role at Acme\./);
+  } finally {
+    fs.rmSync(f, { force: true });
+  }
 });
 
 test('Auto Answer shows Claude Code errors verbatim', () => {

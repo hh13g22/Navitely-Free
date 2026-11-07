@@ -17,7 +17,6 @@ import { getOrchestrator, type OrchestratorEvent, type UserState } from '../../l
 import type { ToasterId } from '../../lib/onboarding/orchestrator.ts';
 import { PermissionsToaster } from './PermissionsToaster';
 import { BrowserExtensionToaster } from './BrowserExtensionToaster';
-import { PlansToaster } from './PlansToaster';
 import { DemoVideoToaster } from './DemoVideoToaster';
 import { SupportToaster } from '../SupportToaster';
 import ReviewPromptHost from '../ReviewPromptHost';
@@ -91,6 +90,12 @@ export const OrchestratorProvider: React.FC<ProviderProps> = ({ children }) => {
 };
 
 // ─── Host ─────────────────────────────────────────────────────────
+
+/** Renders nothing and calls onMount once — used to retire a disabled card slot. */
+const SelfDismiss: React.FC<{ onMount: () => void }> = ({ onMount }) => {
+  useEffect(() => { onMount(); /* once */ }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+};
 
 export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, onOpenProfile }) => {
   const orch = getOrchestrator();
@@ -173,7 +178,11 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
       );
 
     case 'plans':
-      return <PlansToaster isOpen={true} onDismiss={closeWith('plans')} onOpenPlans={() => openSettings('plans')} />;
+      // Local build: no startup pricing popup. The card keeps its slot in the
+      // onboarding scheduler (so pacing of the cards after it is unchanged) but
+      // shows nothing and retires itself. The "Unlock Pro" surface in Settings
+      // now renders "Your Context" (upgrade/UnlockProPlans → ClaudeContextPanel).
+      return <SelfDismiss onMount={() => closeWith('plans')()} />;
 
     case 'demo_video':
       return <DemoVideoToaster isOpen={true} onDismiss={closeWith('demo_video')} />;
