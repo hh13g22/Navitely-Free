@@ -45,6 +45,7 @@ test('buildSpawn strips nested-session markers and disables compaction', () => {
   assert.match(args[t + 2], /^--/);
   assert.ok(args.includes('--strict-mcp-config'));
   for (const banned of ['--model', '--effort', '--agent', '--bare', '--safe-mode']) assert.ok(!args.includes(banned));
+  assert.deepEqual(buildSpawn('claude', {}, ['--model', 'haiku']).args.slice(-2), ['--model', 'haiku']);
 });
 
 /** A fake `claude` child: records stdin lines, lets the test script stdout. */
@@ -167,6 +168,38 @@ test('missing binary throws the actionable not-found error', async () => {
   await assert.rejects(collect(svc.stream({ text: 'x' })), /Claude Code CLI: not found .*claudeCodePath/);
 });
 
+test('a recycling session swaps in a warm spare after N turns', async () => {
+  const { spawn, children } = fakeSpawn();
+  const svc = new ClaudeCodeCliService(spawn, { recycleAfterTurns: 2 });
+  for (const n of [1, 2]) {
+    const p = collect(svc.stream({ text: `t${n}` }));
+    await tick();
+    children[0].say(TEXT, OK);
+    assert.equal(await p, 'OK');
+  }
+  assert.equal(children.length, 2, 'spare spawned right after turn 2');
+  assert.equal(children[0].exitCode, 1, 'old session killed');
+  const p = collect(svc.stream({ text: 't3' }));
+  await tick();
+  assert.equal(children[1].lines[0].message.content.at(-1).text, 't3');
+  children[1].say(TEXT, OK);
+  assert.equal(await p, 'OK');
+});
+
+test("a stopped session's late exit does not fail its replacement's turn", async () => {
+  const { spawn, children } = fakeSpawn();
+  const svc = new ClaudeCodeCliService(spawn);
+  svc.warm();
+  const old = children[0];
+  old.kill = () => { old.exitCode = 1; }; // exit arrives later, not inside kill()
+  svc.stop();
+  const p = collect(svc.stream({ text: 'x' }));
+  await tick();
+  old.emit('exit', null, 'SIGTERM');
+  children[1].say(TEXT, OK);
+  assert.equal(await p, 'OK');
+});
+
 test('Auto Answer shows Claude Code errors verbatim', () => {
   assert.equal(accountOrSetupUserMessage(new Error('Claude Code CLI: session is full.')), 'Claude Code CLI: session is full.');
 });
@@ -179,5 +212,17 @@ test('live: one continuous session remembers the previous turn', { skip: process
     assert.match(answer, /PELICAN-7/);
   } finally {
     svc.stop();
+  }
+});
+
+test('live: the judge session runs on Haiku and answers a verdict', { skip: process.env.RUN_CLAUDE_CODE_LIVE !== '1' }, async () => {
+  const judge = ClaudeCodeCliService.getJudgeInstance();
+  try {
+    const t0 = Date.now();
+    const out = await collect(judge.stream({ text: 'Reply with exactly this JSON and nothing else: {"answer":true}' }));
+    console.log(`judge reply in ${Date.now() - t0} ms: ${out}`);
+    assert.match(out, /"answer"\s*:\s*true/);
+  } finally {
+    judge.stop();
   }
 });

@@ -2845,6 +2845,26 @@ export class LLMHelper {
     yield* ClaudeCodeCliService.getInstance().stream({ text: userContent, systemPrompt, images, signal });
   }
 
+  /**
+   * Auto Answer verdict from the judge session (ClaudeCodeCliService.getJudgeInstance).
+   * Gets the last-rung budget: for a Claude-Code-only user nothing else follows.
+   * Never throws: a miss returns null and the caller's ladder decides.
+   */
+  private async judgeWithClaudeCode(message: string, signal?: AbortSignal): Promise<string | null> {
+    if (this.isLocalOnlyMode) return null;
+    const timeout = AbortSignal.timeout(LAST_JUDGE_RUNG_TIMEOUT_MS);
+    const stop = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    try {
+      this.assertOutboundScopes('claudecode', message);
+      let text = '';
+      for await (const t of ClaudeCodeCliService.getJudgeInstance().stream({ text: message, signal: stop })) text += t;
+      return stop.aborted ? null : text.trim() || null;
+    } catch (e: any) {
+      console.warn('[ClaudeCodeCli] judge:', e?.message || e);
+      return null;
+    }
+  }
+
   private getAntigravityModelId(model: string): string { return model.replace(/^antigravity:/, ''); }
 
   private async *streamWithAntigravity(userPrompt: string, systemPrompt?: string, imagePaths?: string[], signal?: AbortSignal, model = this.currentModelId, direct = false): AsyncGenerator<string> {
@@ -3024,7 +3044,10 @@ export class LLMHelper {
 
     console.log(`[LLMHelper] Switched to Model: ${targetModelId}`);
     // Start the CLI session now so the first answer skips the ~1.3 s spawn.
-    if (this.isClaudeCodeModel(targetModelId)) ClaudeCodeCliService.getInstance().warm();
+    if (this.isClaudeCodeModel(targetModelId)) {
+      ClaudeCodeCliService.getInstance().warm();
+      ClaudeCodeCliService.getJudgeInstance().warm();
+    }
     // Keep OpenRouter's "which models read images" answers current (2026-10-01).
     if (this.isOpenRouterModel(targetModelId)) void this.refreshOpenRouterVisionData();
     // …and, when nothing says whether this model reads images, test it once.
@@ -6310,6 +6333,14 @@ let isMultimodal = !!(imagePaths?.length);
     const aborted = () => signal?.aborted === true;
     const abortError = () => Object.assign(new Error('judge aborted: superseded by newer speech'), { name: 'AbortError' });
     const userOnly = [{ role: 'user' as const, content: message }];
+
+    // Claude Code users judge on their own subscription too: a second local
+    // session (model pinned in getJudgeInstance). Empty / timed out / failed → the ladder below.
+    if (this.isUsingClaudeCode()) {
+      const verdict = await this.judgeWithClaudeCode(message, signal);
+      if (verdict) return verdict;
+      if (aborted()) throw abortError();
+    }
 
     // Rung 0: the user's chosen fast model, when they have set one. Everything
     // below is the measured per-provider ladder and remains the fallback, so an

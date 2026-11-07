@@ -2439,6 +2439,7 @@ export class AppState {
         modelReasoningEffort: settingsManager.get('codexCliModelReasoningEffort'),
       });
       ClaudeCodeCliService.getInstance().setPath(settingsManager.get('claudeCodePath'));
+      ClaudeCodeCliService.getJudgeInstance().setPath(settingsManager.get('claudeCodePath'));
     }
 
     // Initialize RAGManager (requires database to be ready)
@@ -12289,6 +12290,7 @@ if (process.env.THINKING_MATRIX === '1') {
     OllamaManager.getInstance().stop();
     // Kill the Claude Code CLI session (synchronous: no orphan claude process).
     ClaudeCodeCliService.getInstance().stop();
+    ClaudeCodeCliService.getJudgeInstance().stop();
 
     // Stop any in-flight Settings > Audio test so the OS mic indicator turns
     // off cleanly on quit. Without this, a user who quits while on the Audio

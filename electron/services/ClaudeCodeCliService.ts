@@ -77,11 +77,18 @@ export function parseLine(line: string): CliEvent | null {
 }
 
 /** argv + env for the child. The env drops this-app-inside-Claude-Code markers. */
-export function buildSpawn(cliPath: string, env: NodeJS.ProcessEnv): { cmd: string; args: string[]; env: NodeJS.ProcessEnv } {
+export function buildSpawn(cliPath: string, env: NodeJS.ProcessEnv, extraArgs: readonly string[] = []): { cmd: string; args: string[]; env: NodeJS.ProcessEnv } {
   const clean: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(env)) if (!/^CLAUDECODE|^CLAUDE_CODE_/.test(k)) clean[k] = v;
   clean.DISABLE_AUTO_COMPACT = '1';
-  return { cmd: cliPath, args: [...ARGS], env: clean };
+  return { cmd: cliPath, args: [...ARGS, ...extraArgs], env: clean };
+}
+
+export interface ClaudeCodeSessionOptions {
+  /** Appended to argv. The answer session passes none: it runs the user's CLI defaults. */
+  extraArgs?: readonly string[];
+  /** Replace the session (kill + spawn a warm spare) after this many completed turns. 0 = never. */
+  recycleAfterTurns?: number;
 }
 
 function fail(msg: string): Error { return new Error(`${CLAUDE_CODE_ERROR_PREFIX} ${msg}`); }
@@ -92,14 +99,31 @@ export class ClaudeCodeCliService {
     return (this.instance ??= new ClaudeCodeCliService());
   }
 
-  constructor(private readonly spawnFn: typeof nodeSpawn = nodeSpawn) {}
+  /**
+   * Auto Answer's judge: its own session, so verdicts never queue behind an
+   * answer or land in the answer session's history. Haiku (user's choice) for
+   * latency. Each call carries a ~12k-char judge prompt, so the session is
+   * replaced every 20 verdicts (~60k tokens of history). The spare's first
+   * verdict is cold (measured 3.6 s vs 1.4 s median, past the 2.3 s budget), so
+   * a shorter cycle trades more missed verdicts for less history.
+   */
+  private static judgeInstance: ClaudeCodeCliService | null = null;
+  static getJudgeInstance(): ClaudeCodeCliService {
+    return (this.judgeInstance ??= new ClaudeCodeCliService(nodeSpawn, { extraArgs: ['--model', 'haiku'], recycleAfterTurns: 20 }));
+  }
+
+  constructor(
+    private readonly spawnFn: typeof nodeSpawn = nodeSpawn,
+    private readonly session: ClaudeCodeSessionOptions = {},
+  ) {}
 
   private cliPath = 'claude';
   private child: ChildProcess | null = null;
   private stderrHead = '';
   private lastSystemPrompt: string | undefined;
-  /** The turn currently reading stdout. One at a time: see `tail`. */
-  private listener: { onEvent(e: CliEvent): void; onExit(err: Error): void } | null = null;
+  private turnsDone = 0;
+  /** The turn currently reading `child`'s stdout. One at a time: see `tail`. */
+  private listener: { child: ChildProcess; onEvent(e: CliEvent): void; onExit(err: Error): void } | null = null;
   // ponytail: one session = one turn at a time; add a second process if
   // overlapping Auto Answer + manual turns queue too long.
   private tail: Promise<void> = Promise.resolve();
@@ -133,6 +157,8 @@ export class ClaudeCodeCliService {
       await prev;
       if (opts.signal?.aborted) return;
       yield* this.turn(opts);
+      const limit = this.session.recycleAfterTurns ?? 0;
+      if (limit > 0 && ++this.turnsDone >= limit) { this.stop(); this.warm(); }
     } finally {
       release();
     }
@@ -140,16 +166,20 @@ export class ClaudeCodeCliService {
 
   private ensureChild(): ChildProcess {
     if (this.child) return this.child;
-    const { cmd, args, env } = buildSpawn(this.cliPath, process.env);
+    const { cmd, args, env } = buildSpawn(this.cliPath, process.env, this.session.extraArgs);
     const cwd = path.join(os.tmpdir(), 'natively-claude-code');
     fs.mkdirSync(cwd, { recursive: true });
     const child = this.spawnFn(cmd, args, { cwd, env, shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     this.child = child;
     this.stderrHead = '';
+    this.turnsDone = 0;
+    // Only this child's own turn hears its death: a stopped session's late exit
+    // must not fail the turn already running on its replacement.
     const lost = (err: Error) => {
-      if (this.child === child) { this.child = null; this.lastSystemPrompt = undefined; }
-      if (this.listener) this.listener.onExit(err);
-      else console.error('[ClaudeCodeCli]', err.message);
+      const current = this.child === child;
+      if (current) { this.child = null; this.lastSystemPrompt = undefined; }
+      if (this.listener?.child === child) this.listener.onExit(err);
+      else if (current) console.error('[ClaudeCodeCli]', err.message);
     };
     child.on('error', (e: NodeJS.ErrnoException) => lost(e.code === 'ENOENT'
       ? fail(`not found ("${cmd}"). Install it or set claudeCodePath to the full path of claude(.exe).`)
@@ -180,7 +210,7 @@ export class ClaudeCodeCliService {
     let failure: Error | null = null;
     let wake: (() => void) | null = null;
     const notify = () => { const w = wake; wake = null; w?.(); };
-    this.listener = { onEvent: e => { events.push(e); notify(); }, onExit: err => { failure = err; notify(); } };
+    this.listener = { child, onEvent: e => { events.push(e); notify(); }, onExit: err => { failure = err; notify(); } };
 
     let interrupted = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
