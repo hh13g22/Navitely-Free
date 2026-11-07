@@ -4104,6 +4104,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 if (isModelEnabled('antigravity', selectorId)) opts.push({ id: selectorId, name: `${label} (Antigravity)` });
             });
         }
+        if (isProviderEnabled('claudecode')) opts.push({ id: 'claudecode', name: 'Claude Code CLI' });
         if (hasStoredKey.litellm && isProviderEnabled('litellm')) {
             // Same allow-list gate the cloud providers get above. Without it the proxy's
             // full catalogue reaches the picker while modelAvailable() filters it, and

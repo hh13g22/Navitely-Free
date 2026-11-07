@@ -1438,6 +1438,7 @@ import { AUTO_FORMULA_IMAGE_MAX_AGE_MS, FormulaScreenshotHandoff, markMissingFor
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
+import { ClaudeCodeCliService } from './services/ClaudeCodeCliService'
 import { linkSessionToCalendar, cancelSessionCalendarLink } from './services/calendar/SessionCalendarLinker'
 import { configureAssistService, getAssistService } from './services/assist/AssistService'
 import { liveHelperDisplayKind, type LiveHelperAction } from './llm/liveHelpers'
@@ -2437,6 +2438,7 @@ export class AppState {
         serviceTier: settingsManager.get('codexCliServiceTier'),
         modelReasoningEffort: settingsManager.get('codexCliModelReasoningEffort'),
       });
+      ClaudeCodeCliService.getInstance().setPath(settingsManager.get('claudeCodePath'));
     }
 
     // Initialize RAGManager (requires database to be ready)
@@ -12285,6 +12287,8 @@ if (process.env.THINKING_MATRIX === '1') {
 
     // Kill Ollama if we started it
     OllamaManager.getInstance().stop();
+    // Kill the Claude Code CLI session (synchronous: no orphan claude process).
+    ClaudeCodeCliService.getInstance().stop();
 
     // Stop any in-flight Settings > Audio test so the OS mic indicator turns
     // off cleanly on quit. Without this, a user who quits while on the Audio

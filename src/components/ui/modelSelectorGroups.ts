@@ -42,6 +42,7 @@ const GROUP_LABELS: Record<string, string> = {
     fluxion: 'Sidrune',
     agentrouter: 'AgentRouter',
     antigravity: 'Antigravity',
+    claudecode: 'Claude Code',
     'codex-cli': 'OpenAI Codex',
     litellm: 'LiteLLM',
     ninerouter: '9Router',

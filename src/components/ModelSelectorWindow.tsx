@@ -197,6 +197,9 @@ const ModelSelectorWindow = () => {
                     }
                 } catch { /* Offline or signed out; other providers remain available. */ }
 
+                // Claude Code CLI: the user's local `claude`, on its own model/effort settings.
+                models.push({ id: 'claudecode', name: 'Claude Code CLI', type: 'cloud', provider: 'claudecode' });
+
                 // Custom Providers
                 customProviders.forEach((p: any) => {
                     models.push({ id: p.id, name: p.name, type: 'custom' });

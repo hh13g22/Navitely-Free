@@ -113,7 +113,7 @@ function repairFirstUsefulMs(llmHelper: any, minMs: number = 7000, turnKey?: obj
   const isUserEndpoint = llmHelper?.isUsingUserEndpoint?.() === true;
   return repairDeadlineMs({
     hasImages: turnKey ? llmHelper?.replayedAnswerHasImages?.(turnKey) === true : false,
-    isLocal: llmHelper?.isUsingOllama?.() === true || llmHelper?.isUsingCodexCli?.() === true,
+    isLocal: llmHelper?.isUsingOllama?.() === true || llmHelper?.isUsingCodexCli?.() === true || llmHelper?.isUsingClaudeCode?.() === true,
     viaServerCascade: llmHelper?.isUsingNativelyServerCascade?.() === true,
     isUserEndpoint,
     observedUserEndpointLatency: isUserEndpoint ? (llmHelper?.observedAnswerLatency?.() ?? null) : null,
@@ -784,6 +784,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // isProviderEnabled() in AIProvidersSettings.tsx must use the same names.
       const providerFamily = (modelId: string): string => {
         if (modelId === 'natively') return 'natively';
+        // Not 'claude': that family is the Anthropic API key (`claude-` ids below).
+        if (modelId === 'claudecode') return 'claudecode';
         if (modelId.startsWith('antigravity:')) return 'antigravity';
         if (modelId.startsWith('codex-cli')) return 'codex-cli';
         if (modelId.startsWith('litellm/')) return 'litellm';
@@ -5345,7 +5347,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           // turn's failure in between could time and file the answer for one
           // model while another answered it.
           const answerLlm = llmHelper.textTurn?.(myController?.signal) ?? llmHelper;
-          const usingLocalLlm = answerLlm.isUsingOllama() || answerLlm.isUsingCodexCli();
+          const usingLocalLlm = answerLlm.isUsingOllama() || answerLlm.isUsingCodexCli() || answerLlm.isUsingClaudeCode();
           // F-301: on the natively-api route the server rotates providers at
           // 10s; give it room to rescue the turn instead of aborting at 7s.
           const viaServerCascade = answerLlm.isUsingNativelyServerCascade?.() === true;
@@ -21404,7 +21406,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Photos and attached screenshots make this a vision turn, timed like
         // the desktop's screenshot questions (see the manual-chat site).
         const phoneHasImages = phoneImagePaths.length > 0;
-        const phoneUsingLocalLlm = phoneLlm.isUsingOllama() || phoneLlm.isUsingCodexCli();
+        const phoneUsingLocalLlm = phoneLlm.isUsingOllama() || phoneLlm.isUsingCodexCli() || phoneLlm.isUsingClaudeCode();
         const phoneViaServerCascade = phoneLlm.isUsingNativelyServerCascade?.() === true;
         const phoneUsingUserEndpoint = phoneLlm.isUsingUserEndpoint?.() === true;
         const phoneObservedLatency = phoneUsingUserEndpoint

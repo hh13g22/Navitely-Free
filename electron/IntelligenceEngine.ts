@@ -432,7 +432,8 @@ export class IntelligenceEngine extends EventEmitter {
             // A repair that inherits the answer's screenshot pays a multimodal
             // prefill, which no text-sized window can clear.
             hasImages: turnKey ? h?.replayedAnswerHasImages?.(turnKey) === true : false,
-            isLocal: typeof h?.isUsingOllama === 'function' ? h.isUsingOllama() === true : false,
+            isLocal: (typeof h?.isUsingOllama === 'function' ? h.isUsingOllama() === true : false)
+                || (typeof h?.isUsingClaudeCode === 'function' && h.isUsingClaudeCode() === true),
             viaServerCascade: typeof h?.isUsingNativelyServerCascade === 'function' ? h.isUsingNativelyServerCascade() === true : false,
             isUserEndpoint,
             observedUserEndpointLatency: isUserEndpoint && typeof h?.observedAnswerLatency === 'function'
@@ -4771,9 +4772,10 @@ export class IntelligenceEngine extends EventEmitter {
             const answerLlm: any = typeof (this.llmHelper as any).textTurn === 'function'
                 ? (this.llmHelper as any).textTurn(whatToAnswerCancellationToken.signal)
                 : this.llmHelper;
-            const usingLocalLlm = typeof answerLlm.isUsingOllama === 'function'
+            const usingLocalLlm = (typeof answerLlm.isUsingOllama === 'function'
                 ? answerLlm.isUsingOllama()
-                : false;
+                : false)
+                || (typeof answerLlm.isUsingClaudeCode === 'function' && answerLlm.isUsingClaudeCode() === true);
             // An image-bearing turn goes through streamVisionWithFallback, whose
             // per-attempt budget is 20s and up — but only when the outer ceiling
             // lets it. LIVE_TOTAL_HARD_TIMEOUT_MS is derived from the natively

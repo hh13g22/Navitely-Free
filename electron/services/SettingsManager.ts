@@ -105,6 +105,8 @@ export interface AppSettings {
      */
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
+    /** Full path to the `claude` CLI; unset = `claude` from PATH (ClaudeCodeCliService). */
+    claudeCodePath?: string;
     codexCliEnabled?: boolean;
     codexCliPath?: string;
     codexCliModel?: string;
