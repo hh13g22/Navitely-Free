@@ -100,11 +100,12 @@ describe('App owns the trial flag and hands it to both managers', () => {
     );
   });
 
-  test('Profile Intelligence now receives it too', () => {
-    assert.ok(
-      /<ProfileIntelligenceSettings[\s\S]{0,400}?isTrialActive=\{!!activeTrial\}/.test(appCode),
-      'ProfileIntelligenceSettings must receive isTrialActive — without it the panel defaults to locked',
-    );
+  // Local build: the profile slot renders the user's own MyProfilePanel (their
+  // CV / cover letter / fields for their Claude Code CLI), which has no lock,
+  // so there is no trial flag to hand it.
+  test('the profile slot renders the unlocked My Profile panel', () => {
+    assert.ok(/<MyProfilePanel onClose=\{closeManagerPanel\} \/>/.test(appCode), 'App mounts MyProfilePanel');
+    assert.ok(!/<ProfileIntelligenceSettings/.test(appCode), 'the Pro-gated panel is no longer mounted');
   });
 
   test('ModesSettings honours the prop it is given', { skip: modesCode === null && 'premium submodule not checked out' }, () => {

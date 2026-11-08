@@ -18,8 +18,6 @@ import type { ToasterId } from '../../lib/onboarding/orchestrator.ts';
 import { PermissionsToaster } from './PermissionsToaster';
 import { BrowserExtensionToaster } from './BrowserExtensionToaster';
 import { DemoVideoToaster } from './DemoVideoToaster';
-import { SupportToaster } from '../SupportToaster';
-import ReviewPromptHost from '../ReviewPromptHost';
 import {
   NativelyApiPromoToaster,
   ProfileFeatureToaster,
@@ -181,7 +179,7 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
       // Local build: no startup pricing popup. The card keeps its slot in the
       // onboarding scheduler (so pacing of the cards after it is unchanged) but
       // shows nothing and retires itself. The "Unlock Pro" surface in Settings
-      // now renders "Your Context" (upgrade/UnlockProPlans → ClaudeContextPanel).
+      // now renders "My Profile" (upgrade/UnlockProPlans → profile/MyProfilePanel).
       return <SelfDismiss onMount={() => closeWith('plans')()} />;
 
     case 'demo_video':
@@ -211,17 +209,8 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
       return null;
 
     case 'support':
-      return (
-        <SupportToaster
-          isOpen={true}
-          onDismiss={(reason?: CloseReason) => {
-            // DonationManager still counts showings (About page, legacy
-            // import); the card ledger decides when support may return.
-            window.electronAPI?.markDonationToastShown?.().catch(() => {});
-            closeWith('support')(reason);
-          }}
-        />
-      );
+      // Local build: no donation ask. The slot retires itself like 'plans'.
+      return <SelfDismiss onMount={() => closeWith('support')()} />;
 
     // ── Ads (premium components; scheduled like every other card) ──
     case 'natively_api_new':
@@ -278,14 +267,8 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
       );
 
     case 'review_prompt':
-      return (
-        <ReviewPromptHost
-          isOpen={true}
-          paused={false}
-          onOutcome={(o) => recorder.outcome(o)}
-          onClose={closeWith('review_prompt')}
-        />
-      );
+      // Local build: no "please review us" prompt. The slot retires itself.
+      return <SelfDismiss onMount={() => closeWith('review_prompt')()} />;
 
     default:
       return null;

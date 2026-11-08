@@ -10,6 +10,18 @@ import type { CalendarSourceId as CalendarSourceIdInfo, CalendarSourceStatus as 
  * Metadata the companion extension sends with a captured page (drives the
  * optional "Page context" chip). Mirrors DomCaptureMeta in PhoneMirrorService.
  */
+/** The user's Claude Code profile as the renderer sees it (claudeCodeContext.ts profileSummary). */
+interface ClaudeProfileDocSummary { fileName: string; chars: number; pages?: number; truncated: boolean; addedAt: number }
+interface ClaudeProfileSummary {
+  name: string;
+  lookingFor: string;
+  about: string;
+  jobDescription: string;
+  resume: ClaudeProfileDocSummary | null;
+  coverLetter: ClaudeProfileDocSummary | null;
+}
+interface ClaudeProfileResult { success: boolean; canceled?: boolean; error?: string; profile?: ClaudeProfileSummary }
+
 interface DomCaptureMeta {
   title?: string;
   url?: string;
@@ -181,10 +193,11 @@ interface ElectronAPI {
   analyzeImageFile: (path: string) => Promise<void>;
   quitApp: () => Promise<void>;
 
-  /** The user's own Claude Code context file (bio / résumé / target job). */
-  getClaudeContext: () => Promise<{ text: string }>;
-  saveClaudeContext: (text: string) => Promise<{ success: boolean; error?: string }>;
-  openClaudeContext: () => Promise<{ success: boolean; error?: string }>;
+  /** The user's own profile for Claude Code: text fields + attached CV / cover letter. */
+  getClaudeProfile: () => Promise<ClaudeProfileSummary>;
+  saveClaudeProfileFields: (fields: Partial<Pick<ClaudeProfileSummary, 'name' | 'lookingFor' | 'about' | 'jobDescription'>>) => Promise<ClaudeProfileResult>;
+  attachClaudeProfileDoc: (kind: 'resume' | 'coverLetter') => Promise<ClaudeProfileResult>;
+  removeClaudeProfileDoc: (kind: 'resume' | 'coverLetter') => Promise<ClaudeProfileResult>;
   restartApp: () => Promise<void>;
 
   // LLM Model Management
@@ -1770,9 +1783,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   analyzeImageFile: (path: string) => ipcRenderer.invoke('analyze-image-file', path),
   quitApp: () => ipcRenderer.invoke('quit-app'),
 
-  getClaudeContext: () => ipcRenderer.invoke('claude-context:get'),
-  saveClaudeContext: (text: string) => ipcRenderer.invoke('claude-context:set', text),
-  openClaudeContext: () => ipcRenderer.invoke('claude-context:open'),
+  getClaudeProfile: () => ipcRenderer.invoke('claude-profile:get'),
+  saveClaudeProfileFields: (fields: Record<string, string>) => ipcRenderer.invoke('claude-profile:set-fields', fields),
+  attachClaudeProfileDoc: (kind: 'resume' | 'coverLetter') => ipcRenderer.invoke('claude-profile:attach', kind),
+  removeClaudeProfileDoc: (kind: 'resume' | 'coverLetter') => ipcRenderer.invoke('claude-profile:remove', kind),
   restartApp: () => ipcRenderer.invoke('restart-app'),
   toggleWindow: () => ipcRenderer.invoke('toggle-window'),
   showWindow: (inactive?: boolean) => ipcRenderer.invoke('show-window', inactive),

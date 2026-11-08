@@ -14,7 +14,6 @@ import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
 import { motion, AnimatePresence, useReducedMotion, type TargetAndTransition, type Variants } from 'framer-motion';
-import { FeatureSpotlight } from './FeatureSpotlight';
 import './LauncherCta.css';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -702,7 +701,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                 window.electronAPI?.onboardingSetFlag?.('seenProfileOnboarding', true).catch(() => {});
                                 onOpenProfile?.();
                             }}
-                            title={t("Profile Intelligence")}
+                            title={t("My Profile")}
                             className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
                         >
                             <ProfileIntelligenceIcon size={18} />
@@ -739,12 +738,12 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                         </div>
                                         <div className="flex-1 pt-[2px]">
                                             <h3 className="text-[14px] font-semibold tracking-[-0.015em] mb-1 flex items-center gap-2">
-                                                <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>{t('Profile Intel')}</span>
+                                                <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>{t('My Profile')}</span>
                                             </h3>
                                             <p className={`text-[12px] leading-[1.35] mb-3.5 tracking-[-0.01em] ${
                                                 isLight ? 'text-slate-500' : 'text-slate-400'
                                             }`}>
-                                                {t('Manage your persona, career history, and active job description.')}
+                                                {t('Attach your CV and cover letter so every answer draws on your real experience.')}
                                             </p>
                                             <div className="flex justify-end gap-1.5 isolate">
                                                 <button 
@@ -1199,16 +1198,12 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                         </button>
                                     </div>
 
-                                    {/* 2. Hero Section Cards */}
+                                    {/* 2. Hero Section Cards — local build: the promo carousel
+                                        (FeatureSpotlight: sponsor ad, affiliate / creator / "advertise"
+                                        pitches) is gone. The calendar card shows only once a calendar
+                                        is connected; until then the row is not drawn at all. */}
+                                    {isCalendarConnected && (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 h-[198px]">
-                                        {/* Default Intro — natively support & upcoming features.
-                                            Calendar "Up Next" lives in Settings → Calendar, not here. */}
-                                        <div className="md:col-span-2 h-full">
-                                            <FeatureSpotlight />
-                                        </div>
-
-
-
                                         {/* Right Secondary Card — violet-tinted, "Calendar Connected" + peeking next meeting */}
                                         <UpcomingCalendarCard
                                             className="md:col-span-1"
@@ -1222,6 +1217,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                             onOpenSettings={() => onOpenSettings('calendar')}
                                         />
                                     </div>
+                                    )}
                                 </div>
                             </section>
 

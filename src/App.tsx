@@ -49,7 +49,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 import ModesSettings from "./components/settings/ModesSettings"
 import { GenieModal } from "./components/ui/GenieModal"
 import { GENIE_CLOSE_MS } from "./components/onboarding/useGenieCard"
-import { ProfileIntelligenceSettings } from "./components/ProfileIntelligenceSettings"
+import { MyProfilePanel } from "./components/profile/MyProfilePanel"
 import { useResolvedTheme } from "./hooks/useResolvedTheme"
 import { useDiagramRenderHost } from "./lib/diagram/diagramRuntime"
 import { WelcomeFlow } from "./components/onboarding/WelcomeFlow"
@@ -1500,11 +1500,10 @@ const App: React.FC = () => {
                           onOpenNativelyAPI={() => openSettingsExclusive('plans')}
                         />
                       ) : (
-                        <ProfileIntelligenceSettings
-                          onClose={closeManagerPanel}
-                          isTrialActive={!!activeTrial}
-                          onOpenNativelyAPI={() => openSettingsExclusive('plans')}
-                        />
+                        // Local build: the user's own profile for their Claude Code CLI
+                        // (CV, cover letter, a few fields) in place of the Pro-gated
+                        // Profile Intelligence panel.
+                        <MyProfilePanel onClose={closeManagerPanel} />
                       )}
                     </motion.div>
                     </AnimatePresence>

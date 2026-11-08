@@ -59,9 +59,9 @@ test('quota banner: no hardcoded checkout, plans open in Settings, trials stay o
 
 // Local build: the "Unlock Pro" surface no longer sells anything — it renders
 // the user's own "Your Context" panel. So the page carries no checkout cards,
-// product ids or prices, and delegates to ClaudeContextPanel.
+// product ids or prices, and delegates to MyProfilePanel.
 test('Unlock Pro surface sells nothing: no cards, no checkout, no prices', () => {
-  assert.ok(unlockCode.includes('ClaudeContextPanel'), 'renders the context panel');
+  assert.ok(unlockCode.includes('MyProfilePanel'), 'renders the profile panel');
   assert.doesNotMatch(unlockCode, /pdt_0N|checkout\.dodopayments|CHECKOUT_URLS/, 'no checkout links');
   assert.doesNotMatch(unlockCode, /^\s*id: ('pack_light'|apiPro\.id|'pro_yearly'),/gm, 'no plan cards');
   assert.doesNotMatch(unlockCode, /\$\d|onCheckoutOpened\?\.\(/, 'no prices or checkout callback use');

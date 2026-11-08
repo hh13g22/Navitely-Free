@@ -425,7 +425,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     const hasApiKey = !!nativelyKey && nativelyKey !== TRIAL_SENTINEL_KEY;
     const defaultModel = cm.getDefaultModel();
     // A selected local model is the user's own AI too (hasOwnAiKey leaves Ollama out on purpose).
-    const hasOwnAi = hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }) || usesLocalModel(defaultModel);
+    // So is the user's own Claude Code CLI: without this a Claude-Code-only install read as
+    // "no AI", and its first meeting auto-started a Natively trial that switched the model
+    // and transcription onto Natively (startTrialFlow → syncNativelyModelRuntime).
+    const hasOwnAi = hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() })
+      || usesLocalModel(defaultModel) || defaultModel === 'claudecode';
     const hasPro = isLicensed();
     const trialExpiresAt = cm.getTrialExpiresAt();
     return {
@@ -7518,37 +7522,64 @@ export function initializeIpcHandlers(appState: AppState): void {
     app.quit();
   });
 
-  // The user's own Claude Code context file (claudeCodeContext.ts): a plain
-  // markdown doc in userData the "Your Context" panel reads/writes, and
-  // LLMHelper prepends to every Claude Code answer. No license, no server.
-  const claudeContextPath = () => {
-    const { CLAUDE_CODE_CONTEXT_FILE } = require('./services/claudeCodeContext') as typeof import('./services/claudeCodeContext');
-    return path.join(app.getPath('userData'), CLAUDE_CODE_CONTEXT_FILE);
+  // The user's own profile for Claude Code (claudeCodeContext.ts): name, what
+  // they are looking for, about-me, job post, and the text of an attached CV /
+  // cover letter. JSON in userData; the "My Profile" panel edits it and
+  // LLMHelper prepends it to every Claude Code answer. No license, no server.
+  const profileStore = () => {
+    const ctx = require('./services/claudeCodeContext') as typeof import('./services/claudeCodeContext');
+    return { ctx, file: path.join(app.getPath('userData'), ctx.CLAUDE_PROFILE_FILE) };
   };
-  safeHandle('claude-context:get', () => {
-    try { return { text: fs.readFileSync(claudeContextPath(), 'utf8') }; }
-    catch { return { text: '' }; }
+  safeHandle('claude-profile:get', () => {
+    const { ctx, file } = profileStore();
+    return ctx.profileSummary(ctx.readProfile(file));
   });
-  safeHandle('claude-context:set', (_e, text: unknown) => {
+  safeHandle('claude-profile:set-fields', (_e, fields: unknown) => {
     try {
-      fs.writeFileSync(claudeContextPath(), typeof text === 'string' ? text : '');
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'write failed' };
-    }
-  });
-  safeHandle('claude-context:open', async () => {
-    const p = claudeContextPath();
-    try {
-      if (!fs.existsSync(p)) {
-        const { CLAUDE_CODE_CONTEXT_TEMPLATE } = require('./services/claudeCodeContext') as typeof import('./services/claudeCodeContext');
-        fs.writeFileSync(p, CLAUDE_CODE_CONTEXT_TEMPLATE);
+      const { ctx, file } = profileStore();
+      const p = ctx.readProfile(file);
+      const f = (fields && typeof fields === 'object' ? fields : {}) as Record<string, unknown>;
+      for (const k of ctx.PROFILE_TEXT_FIELDS) {
+        if (typeof f[k] === 'string') p[k] = (f[k] as string).slice(0, 20_000);
       }
-      const err = await shell.openPath(p);
-      return err ? { success: false, error: err } : { success: true };
+      ctx.writeProfile(file, p);
+      return { success: true, profile: ctx.profileSummary(p) };
     } catch (err: any) {
-      return { success: false, error: err?.message || 'open failed' };
+      return { success: false, error: err?.message || 'save failed' };
     }
+  });
+  safeHandle('claude-profile:attach', async (event, kind: unknown) => {
+    if (kind !== 'resume' && kind !== 'coverLetter') return { success: false, error: 'unknown document' };
+    const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const opts = {
+      title: kind === 'resume' ? 'Attach your CV / résumé' : 'Attach your cover letter',
+      properties: ['openFile' as const],
+      filters: [{ name: 'Documents', extensions: ['pdf', 'docx', 'txt', 'md'] }],
+    };
+    const pick = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
+    if (pick.canceled || !pick.filePaths[0]) return { success: false, canceled: true };
+    try {
+      const { extractSafeDocumentText } = require('./services/SafeDocumentTextExtractor') as typeof import('./services/SafeDocumentTextExtractor');
+      const doc = await extractSafeDocumentText(pick.filePaths[0]);
+      if (!doc.content.trim()) {
+        return { success: false, error: `No text found in ${doc.fileName}. If it is a scanned image, export it as a text PDF or Word file.` };
+      }
+      const { ctx, file } = profileStore();
+      const p = ctx.readProfile(file);
+      p[kind] = ctx.makeProfileDoc(doc.fileName, doc.content, doc.pageCount);
+      ctx.writeProfile(file, p);
+      return { success: true, profile: ctx.profileSummary(p) };
+    } catch (err: any) {
+      return { success: false, error: `Could not read that file: ${err?.message || 'unknown error'}` };
+    }
+  });
+  safeHandle('claude-profile:remove', (_e, kind: unknown) => {
+    if (kind !== 'resume' && kind !== 'coverLetter') return { success: false, error: 'unknown document' };
+    const { ctx, file } = profileStore();
+    const p = ctx.readProfile(file);
+    p[kind] = null;
+    ctx.writeProfile(file, p);
+    return { success: true, profile: ctx.profileSummary(p) };
   });
 
   // Generic "restart now" action for banners that need a fresh process —
@@ -13060,7 +13091,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // The overlay's model picker is for the session only and is never
       // stored, so the snapshot's stored default can say "nothing" for someone
       // working on a local model right now. That is their own AI.
-      const sessionLocalModel = !!appState.processingHelper?.getLLMHelper?.()?.isUsingOllama?.();
+      const llm = appState.processingHelper?.getLLMHelper?.();
+      // Claude Code picked in the overlay for this session only is the user's own AI too.
+      const sessionLocalModel = !!llm?.isUsingOllama?.() || !!llm?.isUsingClaudeCode?.();
       const eligible = shouldAutoStartTrial({
         meetingAi: sessionLocalModel ? 'own' : snap.meetingAi,
         hasRealNativelyKey: snap.hasApiKey,

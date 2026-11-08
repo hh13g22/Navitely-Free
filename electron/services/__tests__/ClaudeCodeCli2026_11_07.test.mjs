@@ -17,7 +17,10 @@ const root = path.resolve(__dirname, '../../..');
 const dist = (p) => pathToFileURL(path.join(root, 'dist-electron/electron', p)).href;
 const { parseLine, buildSpawn, ClaudeCodeCliService } = await import(dist('services/ClaudeCodeCliService.js'));
 const { accountOrSetupUserMessage } = await import(dist('llm/providerErrorClassifier.js'));
-const { claudeCodeContextBlock, readClaudeCodeContextFile } = await import(dist('services/claudeCodeContext.js'));
+const {
+  emptyProfile, makeProfileDoc, normalizeProfile, profileContextBlock, profileSummary,
+  readProfile, readProfileContext, writeProfile, PROFILE_DOC_MAX_CHARS,
+} = await import(dist('services/claudeCodeContext.js'));
 
 const TEXT = '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}},"session_id":"s"}';
 const THINK = '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":""}},"session_id":"s"}';
@@ -201,25 +204,49 @@ test("a stopped session's late exit does not fail its replacement's turn", async
   assert.equal(await p, 'OK');
 });
 
-test('context block wraps real text and ignores empty / scaffold-only files', () => {
-  assert.equal(claudeCodeContextBlock(''), '');
-  assert.equal(claudeCodeContextBlock('   \n  '), '');
-  // Headings + HTML comments only (the untouched template) → treated as unset.
-  assert.equal(claudeCodeContextBlock('# My context\n## About me\n<!-- fill in -->'), '');
-  const out = claudeCodeContextBlock('## About me\nStaff engineer, 8 years.');
-  assert.match(out, /^<my_context>/);
-  assert.match(out, /Staff engineer, 8 years\./);
-  assert.match(out, /<\/my_context>$/);
+test('profile block: empty profile sends nothing; fields and documents are assembled', () => {
+  assert.equal(profileContextBlock(emptyProfile()), '');
+  assert.equal(profileContextBlock({ ...emptyProfile(), name: '   ', about: '\n' }), '', 'whitespace only is unset');
+  const out = profileContextBlock({
+    ...emptyProfile(),
+    name: 'Alex Chen',
+    lookingFor: 'Senior frontend role',
+    about: 'Eight years in fintech.',
+    jobDescription: 'React lead at Acme.',
+    resume: makeProfileDoc('alex-cv.pdf', 'Led payments UI rewrite.', 2),
+    coverLetter: makeProfileDoc('cover.docx', 'I love building UIs.'),
+  });
+  assert.match(out, /^<my_context>\n/);
+  assert.match(out, /\n<\/my_context>$/);
+  for (const want of [/Name: Alex Chen/, /Looking for: Senior frontend role/, /## About me\nEight years in fintech\./,
+    /## Job description[^\n]*\nReact lead at Acme\./, /## CV \/ résumé \(from alex-cv\.pdf\)\nLed payments UI rewrite\./,
+    /## Cover letter \(from cover\.docx\)\nI love building UIs\./]) {
+    assert.match(out, want);
+  }
 });
 
-test('reading a missing context file yields empty, not a throw', async () => {
+test('profile documents are capped, and bad stored data normalises to empty', () => {
+  const big = makeProfileDoc('long.pdf', 'x'.repeat(PROFILE_DOC_MAX_CHARS + 500));
+  assert.equal(big.text.length, PROFILE_DOC_MAX_CHARS);
+  assert.equal(big.truncated, true);
+  assert.deepEqual(normalizeProfile('garbage'), emptyProfile());
+  assert.deepEqual(normalizeProfile({ name: 7, resume: { text: '   ' }, evil: 'x' }), emptyProfile());
+});
+
+test('profile file: missing → empty; write then read round-trips; summary hides document text', async () => {
   const os = await import('node:os');
   const fs = await import('node:fs');
-  assert.equal(readClaudeCodeContextFile(path.join(os.tmpdir(), 'does-not-exist-xyz.md')), '');
-  const f = path.join(os.tmpdir(), `ctx-${Date.now()}.md`);
-  fs.writeFileSync(f, '## The job\nStaff role at Acme.');
+  assert.deepEqual(readProfile(path.join(os.tmpdir(), 'no-such-profile-xyz.json')), emptyProfile());
+  assert.equal(readProfileContext(path.join(os.tmpdir(), 'no-such-profile-xyz.json')), '');
+  const f = path.join(os.tmpdir(), `profile-${Date.now()}.json`);
   try {
-    assert.match(readClaudeCodeContextFile(f), /Staff role at Acme\./);
+    const p = { ...emptyProfile(), name: 'Alex', resume: makeProfileDoc('cv.pdf', 'Payments UI.', 1) };
+    writeProfile(f, p);
+    assert.deepEqual(readProfile(f), p);
+    assert.match(readProfileContext(f), /Payments UI\./);
+    const s = profileSummary(readProfile(f));
+    assert.deepEqual(s.resume, { fileName: 'cv.pdf', chars: 12, pages: 1, truncated: false, addedAt: p.resume.addedAt });
+    assert.ok(!JSON.stringify(s).includes('Payments UI.'), 'the renderer gets names and sizes, not the text');
   } finally {
     fs.rmSync(f, { force: true });
   }

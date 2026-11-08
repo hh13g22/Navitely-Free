@@ -54,8 +54,18 @@ test('second review: a local model chosen for this session is the user\'s own AI
   // said "nothing". A keyless user working on Ollama for the session would
   // have had the next meeting moved to Natively's servers by itself.
   const hook = ipc.slice(ipc.indexOf('const autoStartTrialForMeeting = async'), ipc.indexOf('appState.autoStartTrialForMeeting ='));
-  assert.ok(hook.includes('appState.processingHelper?.getLLMHelper?.()?.isUsingOllama?.()'));
+  assert.ok(hook.includes('const llm = appState.processingHelper?.getLLMHelper?.();'));
+  assert.ok(hook.includes('!!llm?.isUsingOllama?.()'), 'a session-only Ollama model is the user\'s own AI');
+  // Local build: so is the user's Claude Code CLI picked for the session.
+  assert.ok(hook.includes('!!llm?.isUsingClaudeCode?.()'), 'a session-only Claude Code model is the user\'s own AI');
   assert.ok(hook.includes("meetingAi: sessionLocalModel ? 'own' : snap.meetingAi,"));
+});
+
+test('local build: a stored Claude Code default is the user\'s own AI (no auto trial)', () => {
+  // Without this a Claude-Code-only install read as "no AI" and its first
+  // meeting started a Natively trial that switched model + transcription.
+  const snap = ipc.slice(ipc.indexOf('const funnelSnapshot = () =>'), ipc.indexOf('funnelTelemetry.setSnapshotResolver'));
+  assert.ok(snap.includes("|| usesLocalModel(defaultModel) || defaultModel === 'claudecode';"));
 });
 
 test('second review: the trial is live before transcription is rebuilt', () => {
