@@ -2343,14 +2343,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'general' && navActivePill}
                                         <Monitor size={16} /> {t('General')}
                                     </button>
-                                    <button
-                                        onClick={() => setActiveTab('plans')}
-                                        className={navItemClass(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro')}
-                                    >
-                                        {(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro') && navActivePill}
-                                        <HiCreditCard size={16} />
-                                        <span>{t('Plans & Billing')}</span>
-                                    </button>
+                                    {/* Local build: no Plans & Billing tab (Natively API / Pro pricing).
+                                        The panel still renders if something opens 'plans' directly. */}
                                     <button
                                         onClick={() => setActiveTab('ai-providers')}
                                         className={navItemClass(activeTab === 'ai-providers')}

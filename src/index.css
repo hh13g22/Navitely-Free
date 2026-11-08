@@ -12466,6 +12466,39 @@ html[data-tooltips='off'] .t-tt {
   display: none !important;
 }
 
+/* Hover labels for icon-only controls (src/lib/hoverLabels.ts): one shared,
+   in-page label in the .t-tt style. In the DOM, so content protection hides it
+   from captures; off entirely while undetectable, like .t-tt. */
+.hover-label {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: var(--tt-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--tt-fg);
+  font-size: 10.5px;
+  font-weight: 450;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border: 1px solid var(--tt-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), 0 1px 2px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  transition: opacity var(--tt-out-dur) var(--tt-out-ease);
+}
+.hover-label.is-on {
+  opacity: 1;
+  transition: opacity var(--tt-in-dur) var(--tt-in-ease);
+}
+html[data-tooltips='off'] .hover-label {
+  display: none !important;
+}
+
 .t-tt {
   position: absolute;
   top: calc(100% + 5px);

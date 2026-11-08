@@ -18,6 +18,7 @@ import './LauncherCta.css';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { PREMIUM_MODES_AVAILABLE } from '../premium';
 import { isMac } from '../utils/platformUtils';
 import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import WindowControls from './WindowControls';
@@ -784,6 +785,8 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                             )}
                         </AnimatePresence>
                     </div>
+                    {/* The Modes screen lives in the premium module; without it the panel opened empty. */}
+                    {PREMIUM_MODES_AVAILABLE && (
                     <div className="relative group/modes-btn select-none">
                         <button
                             data-testid="open-modes-manager"
@@ -887,6 +890,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                             )}
                         </AnimatePresence>
                     </div>
+                    )}
                     <button
                         onClick={() => {
                             onOpenSettings();

@@ -91,5 +91,12 @@ export const MaxUltraUpgradeToaster: React.FC<any> =
 export const ModesSettings: React.FC<any> =
   get(_modesSettings, 'default', NullComponent);
 
+/**
+ * The Modes manager's screen is in this build. Without it ModesSettings is the
+ * NullComponent and the manager panel opened as an empty box, so the entry
+ * points (Launcher header, Setup & Help) hide instead.
+ */
+export const PREMIUM_MODES_AVAILABLE = Object.keys(_modesSettings).length > 0;
+
 export const RoleInsightPanel: React.FC<any> =
   get(_roleInsight, 'RoleInsightPanel', NullComponent);

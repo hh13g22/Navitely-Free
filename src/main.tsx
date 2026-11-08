@@ -5,6 +5,7 @@ import "./overlayLavenderTheme.css"
 import { THEME_CACHE_KEY, applyResolvedTheme } from "./lib/themeTransition.mjs"
 import { createSwitchableTooltipGuard, installNativeTooltipGuard, shouldSuppressNativeTooltips } from "./lib/nativeTooltipGuard.mjs"
 import { wireStealthTooltips } from "./lib/stealthTooltips.mjs"
+import { installHoverLabels } from "./lib/hoverLabels"
 import { installOrphanReleaseClick, shouldRecoverOrphanReleases } from "./lib/orphanReleaseGuard.mjs"
 
 // ── Renderer crash/hang diagnostics ─────────────────────────────────────────
@@ -90,6 +91,9 @@ if (shouldSuppressNativeTooltips(tooltipWindow)) {
 // mid-session, so no hint is worth even residual risk). Unlike the native
 // guard above this is stealth-driven for every window, not per-route.
 wireStealthTooltips(document.documentElement, window.electronAPI);
+// Icon-only controls show their accessible name on hover, as an in-DOM label
+// under the same stealth rule (hoverLabels.ts) — never as a native title.
+installHoverLabels(document);
 
 // Step 1: Apply cached theme synchronously — before React renders.
 // This ensures useResolvedTheme()'s initial useState read sees the correct value.

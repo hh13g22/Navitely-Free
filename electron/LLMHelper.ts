@@ -15518,6 +15518,8 @@ let isMultimodal = !!(imagePaths?.length);
     if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
       return `${this.getAntigravityModelId(this.currentModelId)} (Antigravity)`;
     }
+    // The overlay chip and getCurrentLlmConfig read this; the raw id rendered "Claudecode".
+    if (this.isUsingClaudeCode()) return 'Claude Code CLI';
     if (this.customProvider) return this.customProvider.name;
     if (this.activeCurlProvider) return this.activeCurlProvider.id;
     return this.useOllama ? this.ollamaModel : this.currentModelId;

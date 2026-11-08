@@ -128,6 +128,8 @@ const KEYLESS_AI_DETAIL = {
 export function modelStep(credentials, llm) {
   if (!credentials || !llm) return { state: 'checking', detail: 'Checking…' };
   if (llm.modelId === 'natively' && credentials.hasNativelyKey) return { state: 'done', detail: 'Using Natively API' };
+  // The user's own Claude Code CLI: keyless, and its config reports provider 'gemini'.
+  if (llm.modelId === 'claudecode') return { state: 'done', detail: 'Using your Claude Code CLI' };
   const keyless = KEYLESS_AI_DETAIL[/** @type {keyof typeof KEYLESS_AI_DETAIL} */ (String(llm.provider))];
   if (keyless) return { state: 'done', detail: keyless };
   if (AI_KEY_FLAGS.some((flag) => !!credentials[flag])) return { state: 'done', detail: 'A provider key is saved' };
@@ -189,8 +191,8 @@ export function profileStep(unlocked, profile) {
   if (unlocked === null || profile === undefined) return { state: 'checking', detail: 'Checking…' };
   if (!unlocked) return { state: 'locked', detail: PRO_DETAIL };
   return profile?.hasProfile
-    ? { state: 'done', detail: 'Résumé added · answers can draw on it' }
-    : { state: 'todo', detail: 'Answers can draw on your résumé and the job' };
+    ? { state: 'done', detail: 'Profile added · answers draw on it' }
+    : { state: 'todo', detail: 'Answers can draw on your CV, cover letter and the job' };
 }
 
 /** The Speech Provider list's label for a provider id, or null. */

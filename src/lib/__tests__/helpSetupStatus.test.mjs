@@ -142,6 +142,13 @@ describe('AI model', () => {
     assert.equal(modelStep({}, { provider: 'custom' }).detail, 'Using your own endpoint');
   });
 
+  test('the Claude Code CLI is a model set up, though its config reports provider gemini', () => {
+    // Without this a keyless Claude Code user read "No key or sign-in yet" and a step left.
+    assert.deepEqual(modelStep({}, { provider: 'gemini', modelId: 'claudecode' }), {
+      state: 'done', detail: 'Using your Claude Code CLI',
+    });
+  });
+
   test('still loading', () => {
     assert.equal(modelStep(null, null).state, 'checking');
   });

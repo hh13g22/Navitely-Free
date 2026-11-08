@@ -23,6 +23,7 @@ import {
     HelpLink, HelpPath, HelpSetupMeter, HelpSteps, HelpSubhead, matchesHelpQuery, type HelpMeterStep,
 } from './help/HelpParts';
 import { AnswerFlowFigure, NativelyGlyph, OverlayAnatomyFigure, PermissionsFigure } from './help/HelpGraphics';
+import { PREMIUM_MODES_AVAILABLE } from '../../premium';
 import { HELP_CLIPS, PERMISSIONS_CARD, type HelpClipEntry } from './help/helpClips';
 import {
     getPermissions, getPlatformFacts, getRowCopy, isHelpPlatform,
@@ -173,8 +174,14 @@ function useSetupStatus(platform: HelpPlatform): SetupStatus {
             (api?.modesGetActive?.() ?? Promise.resolve(null))
                 .then((m) => { if (alive) setActiveMode(m ?? null); })
                 .catch(() => { if (alive) setActiveMode(null); });
-            (api?.profileGetStatus?.() ?? Promise.resolve(null))
-                .then((p) => { if (alive) setProfile(p ?? null); })
+            // Local build: the résumé row is the user's own My Profile (free),
+            // not Profile Intelligence's Pro status.
+            ((api as any)?.getClaudeProfile?.() ?? Promise.resolve(null))
+                .then((p: any) => {
+                    if (!alive) return;
+                    const has = !!(p && (p.resume || p.coverLetter || p.name || p.lookingFor || p.about || p.jobDescription));
+                    setProfile({ hasProfile: has });
+                })
                 .catch(() => { if (alive) setProfile(null); });
         };
         readPermissions();
@@ -202,7 +209,7 @@ function useSetupStatus(platform: HelpPlatform): SetupStatus {
         speech: speechStep(platform, creds),
         model: modelStep(creds, llm),
         mode: modeStep(contextUnlocked(license, trial), activeMode),
-        profile: profileStep(contextUnlocked(license, trial), profile),
+        profile: profileStep(true, profile),
         loaded: !!creds && !!llm && (!!check || checkFailed)
             && !!license && !!trial && activeMode !== undefined && profile !== undefined,
     };
@@ -1153,18 +1160,6 @@ const HelpPane: React.FC<{
                 )}
                 <div className={ROW_GROUP}>
                     <SettingsRow
-                        icon={<NativelyGlyph size={20} />}
-                        title={t('Natively API')}
-                        badge={
-                            <Presence kind="badge" id={status.natively.state === 'todo' ? 'quickest' : null}>
-                                <LiquidGlassBadge variant="neutral">{t('Quickest')}</LiquidGlassBadge>
-                            </Presence>
-                        }
-                        description={t(status.natively.detail)}
-                        descriptionKey={status.natively.state}
-                        control={onNavigate && <GoButton label={t('Plans & Billing')} onClick={go('plans')} />}
-                    />
-                    <SettingsRow
                         icon={<ShieldCheck size={20} />}
                         title={t('Allow permissions')}
                         description={t(status.permissions?.detail ?? rowCopy.permissionsStep)}
@@ -1195,6 +1190,7 @@ const HelpPane: React.FC<{
                         description={t('The overlay, or a notepad on the right of the screen.')}
                         control={onNavigate && <GoButton label={t('Overlay')} onClick={go('overlay')} />}
                     />
+                    {PREMIUM_MODES_AVAILABLE && (
                     <SettingsRow
                         icon={<LayoutGrid size={20} />}
                         title={t('Pick a mode')}
@@ -1207,6 +1203,7 @@ const HelpPane: React.FC<{
                         descriptionKey={status.mode.detail}
                         control={onOpenModes && <GoButton label={t('Modes')} onClick={onOpenModes} />}
                     />
+                    )}
                     <SettingsRow
                         icon={<ProfileIntelligenceIcon size={20} />}
                         title={t('Add your résumé')}

@@ -13166,6 +13166,7 @@ Provide only the answer, nothing else.`;
                     <div className="relative">
                       <button
                         data-settings-toggle="true"
+                        aria-label={t('Quick settings')}
                         onClick={(e) => {
                           if (isSettingsOpen) {
                             // If open, just close it (toggle will handle logic but we can be explicit or just toggle)
