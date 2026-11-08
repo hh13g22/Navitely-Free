@@ -195,6 +195,9 @@ interface ElectronAPI {
 
   /** The user's own profile for Claude Code: text fields + attached CV / cover letter. */
   getClaudeProfile: () => Promise<ClaudeProfileSummary>;
+  /** The Claude Code answer session's own model / effort ('' = the CLI's default). */
+  getClaudeCodeConfig: () => Promise<{ model: string; effort: string }>;
+  setClaudeCodeConfig: (next: { model?: string; effort?: string }) => Promise<{ success: boolean; model?: string; effort?: string; error?: string }>;
   saveClaudeProfileFields: (fields: Partial<Pick<ClaudeProfileSummary, 'name' | 'lookingFor' | 'about' | 'jobDescription'>>) => Promise<ClaudeProfileResult>;
   attachClaudeProfileDoc: (kind: 'resume' | 'coverLetter') => Promise<ClaudeProfileResult>;
   removeClaudeProfileDoc: (kind: 'resume' | 'coverLetter') => Promise<ClaudeProfileResult>;
@@ -1784,6 +1787,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   quitApp: () => ipcRenderer.invoke('quit-app'),
 
   getClaudeProfile: () => ipcRenderer.invoke('claude-profile:get'),
+  getClaudeCodeConfig: () => ipcRenderer.invoke('claude-code:get-config'),
+  setClaudeCodeConfig: (next: { model?: string; effort?: string }) => ipcRenderer.invoke('claude-code:set-config', next),
   saveClaudeProfileFields: (fields: Record<string, string>) => ipcRenderer.invoke('claude-profile:set-fields', fields),
   attachClaudeProfileDoc: (kind: 'resume' | 'coverLetter') => ipcRenderer.invoke('claude-profile:attach', kind),
   removeClaudeProfileDoc: (kind: 'resume' | 'coverLetter') => ipcRenderer.invoke('claude-profile:remove', kind),

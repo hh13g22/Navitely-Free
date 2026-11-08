@@ -2440,6 +2440,11 @@ export class AppState {
       });
       ClaudeCodeCliService.getInstance().setPath(settingsManager.get('claudeCodePath'));
       ClaudeCodeCliService.getJudgeInstance().setPath(settingsManager.get('claudeCodePath'));
+      // The app's own model/effort for answers (Settings → AI Providers), not the terminal's.
+      const { answerSessionArgs } = require('./services/ClaudeCodeCliService') as typeof import('./services/ClaudeCodeCliService');
+      if (ClaudeCodeCliService.getInstance().setExtraArgs(answerSessionArgs(
+        settingsManager.get('claudeCodeModel'), settingsManager.get('claudeCodeEffort'),
+      )) && llmHelper.isUsingClaudeCode()) ClaudeCodeCliService.getInstance().warm();
     }
 
     // Initialize RAGManager (requires database to be ready)

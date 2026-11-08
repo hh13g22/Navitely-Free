@@ -7530,6 +7530,35 @@ export function initializeIpcHandlers(appState: AppState): void {
     const ctx = require('./services/claudeCodeContext') as typeof import('./services/claudeCodeContext');
     return { ctx, file: path.join(app.getPath('userData'), ctx.CLAUDE_PROFILE_FILE) };
   };
+  // The Claude Code answer session's own model / effort (AI Providers). Unset
+  // fields are the app defaults (Sonnet, low); '' hands it to the CLI default.
+  const claudeCodeConfig = () => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const sm = SettingsManager.getInstance();
+    const { DEFAULT_ANSWER_MODEL, DEFAULT_ANSWER_EFFORT } = require('./services/ClaudeCodeCliService') as typeof import('./services/ClaudeCodeCliService');
+    const model = sm.get('claudeCodeModel');
+    const effort = sm.get('claudeCodeEffort');
+    return { model: model ?? DEFAULT_ANSWER_MODEL, effort: effort ?? DEFAULT_ANSWER_EFFORT };
+  };
+  safeHandle('claude-code:get-config', () => claudeCodeConfig());
+  safeHandle('claude-code:set-config', (_e, next: unknown) => {
+    try {
+      const { SettingsManager } = require('./services/SettingsManager');
+      const { ClaudeCodeCliService, answerSessionArgs } = require('./services/ClaudeCodeCliService') as typeof import('./services/ClaudeCodeCliService');
+      const sm = SettingsManager.getInstance();
+      const n = (next && typeof next === 'object' ? next : {}) as Record<string, unknown>;
+      if (typeof n.model === 'string') sm.set('claudeCodeModel', n.model.trim());
+      if (typeof n.effort === 'string') sm.set('claudeCodeEffort', n.effort.trim());
+      const cfg = claudeCodeConfig();
+      const svc = ClaudeCodeCliService.getInstance();
+      // A changed flag replaces the session; warm the new one if Claude Code is in use.
+      if (svc.setExtraArgs(answerSessionArgs(cfg.model, cfg.effort))
+        && appState.processingHelper?.getLLMHelper?.()?.isUsingClaudeCode?.()) svc.warm();
+      return { success: true, ...cfg };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'save failed' };
+    }
+  });
   safeHandle('claude-profile:get', () => {
     const { ctx, file } = profileStore();
     return ctx.profileSummary(ctx.readProfile(file));

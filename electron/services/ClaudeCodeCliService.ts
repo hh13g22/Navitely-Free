@@ -56,6 +56,8 @@ export interface ClaudeCodeStreamOptions {
   systemPrompt?: string;
   images?: ClaudeCodeImage[];
   signal?: AbortSignal;
+  /** The session's warm-up turn: not counted toward recycleAfterTurns. */
+  warmup?: boolean;
 }
 
 /** One stdout line → the event it carries, or null for everything we ignore. */
@@ -85,18 +87,48 @@ export function buildSpawn(cliPath: string, env: NodeJS.ProcessEnv, extraArgs: r
 }
 
 export interface ClaudeCodeSessionOptions {
-  /** Appended to argv. The answer session passes none: it runs the user's CLI defaults. */
+  /** Appended to argv (--model / --effort). None = the user's own CLI defaults. */
   extraArgs?: readonly string[];
   /** Replace the session (kill + spawn a warm spare) after this many completed turns. 0 = never. */
   recycleAfterTurns?: number;
+  /**
+   * Sent as the first turn of every new session, reply discarded: the first
+   * real answer of a cold session measured 3.7 s to its first word against a
+   * 1.4 s median. It also proves the login works before the user needs it.
+   */
+  warmupPrompt?: string;
+}
+
+/** Effort levels the CLI accepts (`claude --help`, --effort). */
+export const CLAUDE_CODE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+/** The app's own answer-session defaults (the user's choice, 2026-11-08): fast, not the terminal's Opus/high. */
+export const DEFAULT_ANSWER_MODEL = 'sonnet';
+export const DEFAULT_ANSWER_EFFORT = 'low';
+const WARMUP_PROMPT = 'Connection check. Reply with only: OK';
+
+/**
+ * The answer session's --model / --effort flags from the app's settings.
+ * Unset → the defaults above; '' → leave it to the user's CLI default.
+ * Anything malformed is dropped rather than passed to the CLI as an argument.
+ */
+export function answerSessionArgs(model?: string, effort?: string): string[] {
+  const m = (model ?? DEFAULT_ANSWER_MODEL).trim();
+  const e = (effort ?? DEFAULT_ANSWER_EFFORT).trim();
+  const args: string[] = [];
+  if (m && /^[A-Za-z0-9][A-Za-z0-9._[\]-]{0,79}$/.test(m)) args.push('--model', m);
+  if ((CLAUDE_CODE_EFFORTS as readonly string[]).includes(e)) args.push('--effort', e);
+  return args;
 }
 
 function fail(msg: string): Error { return new Error(`${CLAUDE_CODE_ERROR_PREFIX} ${msg}`); }
 
 export class ClaudeCodeCliService {
   private static instance: ClaudeCodeCliService | null = null;
+  /** The answer session. main.ts applies the user's model/effort settings via setExtraArgs. */
   static getInstance(): ClaudeCodeCliService {
-    return (this.instance ??= new ClaudeCodeCliService());
+    return (this.instance ??= new ClaudeCodeCliService(nodeSpawn, {
+      extraArgs: answerSessionArgs(), warmupPrompt: WARMUP_PROMPT,
+    }));
   }
 
   /**
@@ -109,13 +141,29 @@ export class ClaudeCodeCliService {
    */
   private static judgeInstance: ClaudeCodeCliService | null = null;
   static getJudgeInstance(): ClaudeCodeCliService {
-    return (this.judgeInstance ??= new ClaudeCodeCliService(nodeSpawn, { extraArgs: ['--model', 'haiku'], recycleAfterTurns: 20 }));
+    return (this.judgeInstance ??= new ClaudeCodeCliService(nodeSpawn, {
+      extraArgs: ['--model', 'haiku', '--effort', 'low'], recycleAfterTurns: 20, warmupPrompt: WARMUP_PROMPT,
+    }));
   }
 
   constructor(
     private readonly spawnFn: typeof nodeSpawn = nodeSpawn,
-    private readonly session: ClaudeCodeSessionOptions = {},
+    private session: ClaudeCodeSessionOptions = {},
   ) {}
+
+  /** Change --model / --effort. A running session was started with the old flags, so it is replaced. */
+  setExtraArgs(args: readonly string[]): boolean {
+    const now = this.session.extraArgs ?? [];
+    if (args.length === now.length && args.every((a, i) => a === now[i])) return false;
+    this.session = { ...this.session, extraArgs: [...args] };
+    this.stop();
+    return true;
+  }
+
+  /** The flags the next session starts with (for the settings panel / tests). */
+  getExtraArgs(): readonly string[] {
+    return this.session.extraArgs ?? [];
+  }
 
   private cliPath = 'claude';
   private child: ChildProcess | null = null;
@@ -135,9 +183,23 @@ export class ClaudeCodeCliService {
     this.stop();
   }
 
-  /** Start the session ahead of the first request. A failure is logged here and thrown by the first request. */
+  /**
+   * Start the session ahead of the first request, and run the warm-up turn when
+   * one is configured. A failure is logged here and thrown by the first request.
+   */
   warm(): void {
-    if (!this.child) this.ensureChild();
+    if (this.child) return;
+    this.ensureChild();
+    const text = this.session.warmupPrompt;
+    if (!text) return;
+    // Queued like any turn, so a request that arrives meanwhile simply follows it.
+    void (async () => {
+      try {
+        for await (const _ of this.stream({ text, warmup: true })) { /* reply discarded */ }
+      } catch (e: any) {
+        console.warn('[ClaudeCodeCli] warm-up failed:', e?.message || e);
+      }
+    })();
   }
 
   stop(): void {
@@ -158,7 +220,7 @@ export class ClaudeCodeCliService {
       if (opts.signal?.aborted) return;
       yield* this.turn(opts);
       const limit = this.session.recycleAfterTurns ?? 0;
-      if (limit > 0 && ++this.turnsDone >= limit) { this.stop(); this.warm(); }
+      if (!opts.warmup && limit > 0 && ++this.turnsDone >= limit) { this.stop(); this.warm(); }
     } finally {
       release();
     }

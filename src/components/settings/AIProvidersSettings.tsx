@@ -2739,6 +2739,22 @@ const showFullNameIfCut = (event: React.MouseEvent<HTMLButtonElement>) => {
     row.title = name.scrollWidth > name.clientWidth ? name.textContent ?? '' : '';
 };
 
+/** Claude Code CLI answer session choices ('cli-default' = no flag: the user's own CLI default). */
+const CLAUDE_CODE_MODEL_OPTIONS = [
+    { id: 'sonnet', name: 'Sonnet · fast (default)' },
+    { id: 'haiku', name: 'Haiku · fastest' },
+    { id: 'opus', name: 'Opus · smartest, slower' },
+    { id: 'cli-default', name: 'My Claude Code default' },
+];
+const CLAUDE_CODE_EFFORT_OPTIONS = [
+    { id: 'low', name: 'Low · fastest (default)' },
+    { id: 'medium', name: 'Medium' },
+    { id: 'high', name: 'High' },
+    { id: 'xhigh', name: 'Extra high' },
+    { id: 'max', name: 'Max · slowest' },
+    { id: 'cli-default', name: 'My Claude Code default' },
+];
+
 const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, placeholder, className = "", containerClassName = "relative", maxLabelChars, menuClassName = "w-full", minLabel }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
@@ -3630,6 +3646,24 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [directAssistBusy, setDirectAssistBusy] = useState(false);
     const [directAssistError, setDirectAssistError] = useState('');
     const [fastResponseMode, setFastResponseMode] = useState(false);
+    // Claude Code CLI answer session: the app's own --model / --effort ('' = the CLI's default).
+    const [claudeCodeCfg, setClaudeCodeCfg] = useState<{ model: string; effort: string }>({ model: 'sonnet', effort: 'low' });
+    useEffect(() => {
+        (window as any).electronAPI?.getClaudeCodeConfig?.()
+            .then((c: { model: string; effort: string } | undefined) => { if (c) setClaudeCodeCfg(c); })
+            .catch(() => {});
+    }, []);
+    const saveClaudeCodeCfg = async (next: { model?: string; effort?: string }) => {
+        const previous = claudeCodeCfg;
+        setClaudeCodeCfg({ ...claudeCodeCfg, ...next });
+        try {
+            const r = await (window as any).electronAPI?.setClaudeCodeConfig?.(next);
+            if (!r?.success) setClaudeCodeCfg(previous);
+            else setClaudeCodeCfg({ model: r.model ?? '', effort: r.effort ?? '' });
+        } catch {
+            setClaudeCodeCfg(previous);
+        }
+    };
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
     // Card rows that open on a saved key stay still while the stored ones load.
     const motionReady = useMotionReadyAfter(credentialsLoaded);
@@ -5371,6 +5405,37 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         }}
                     />
                 </div>
+
+            {defaultModel === 'claudecode' && (
+                <>
+                <div className="aip-card p-5 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <label className="block text-sm font-bold mb-0 aip-hero">{t('Claude Code model')}</label>
+                        <p className="text-xs aip-muted mt-0.5">{t('The model Natively answers with. Your terminal keeps its own.')}</p>
+                    </div>
+                    <ModelSelect
+                        containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
+                        minLabel={HERO_MODEL_PICKER_MIN_LABEL}
+                        value={claudeCodeCfg.model || 'cli-default'}
+                        options={CLAUDE_CODE_MODEL_OPTIONS.map((o) => ({ id: o.id, name: t(o.name) }))}
+                        onChange={(val) => { void saveClaudeCodeCfg({ model: val === 'cli-default' ? '' : val }); }}
+                    />
+                </div>
+                <div className="aip-card p-5 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <label className="block text-sm font-bold mb-0 aip-hero">{t('Claude Code effort')}</label>
+                        <p className="text-xs aip-muted mt-0.5">{t('Lower answers faster; higher thinks longer on hard questions.')}</p>
+                    </div>
+                    <ModelSelect
+                        containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
+                        minLabel={HERO_MODEL_PICKER_MIN_LABEL}
+                        value={claudeCodeCfg.effort || 'cli-default'}
+                        options={CLAUDE_CODE_EFFORT_OPTIONS.map((o) => ({ id: o.id, name: t(o.name) }))}
+                        onChange={(val) => { void saveClaudeCodeCfg({ effort: val === 'cli-default' ? '' : val }); }}
+                    />
+                </div>
+                </>
+            )}
 
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">

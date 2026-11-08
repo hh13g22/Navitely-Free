@@ -15,7 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 const dist = (p) => pathToFileURL(path.join(root, 'dist-electron/electron', p)).href;
-const { parseLine, buildSpawn, ClaudeCodeCliService } = await import(dist('services/ClaudeCodeCliService.js'));
+const { parseLine, buildSpawn, ClaudeCodeCliService, answerSessionArgs } = await import(dist('services/ClaudeCodeCliService.js'));
 const { accountOrSetupUserMessage } = await import(dist('llm/providerErrorClassifier.js'));
 const {
   emptyProfile, makeProfileDoc, normalizeProfile, profileContextBlock, profileSummary,
@@ -250,6 +250,47 @@ test('profile file: missing → empty; write then read round-trips; summary hide
   } finally {
     fs.rmSync(f, { force: true });
   }
+});
+
+test('answer-session flags: Sonnet/low by default, CLI default on request, junk never reaches argv', () => {
+  assert.deepEqual(answerSessionArgs(), ['--model', 'sonnet', '--effort', 'low']);
+  assert.deepEqual(answerSessionArgs(undefined, undefined), ['--model', 'sonnet', '--effort', 'low']);
+  assert.deepEqual(answerSessionArgs('', ''), [], "'' hands both to the user's CLI default");
+  assert.deepEqual(answerSessionArgs('opus', 'high'), ['--model', 'opus', '--effort', 'high']);
+  assert.deepEqual(answerSessionArgs('claude-sonnet-5-5[1m]', 'max'), ['--model', 'claude-sonnet-5-5[1m]', '--effort', 'max']);
+  assert.deepEqual(answerSessionArgs('opus --dangerously-skip-permissions', 'turbo'), [], 'malformed values are dropped');
+  assert.deepEqual(answerSessionArgs('-p', 'low'), ['--effort', 'low'], 'a flag-looking model is dropped');
+});
+
+test('changing the flags replaces the running session; the same flags do not', async () => {
+  const { spawn, children } = fakeSpawn();
+  const svc = new ClaudeCodeCliService(spawn, { extraArgs: ['--model', 'sonnet'] });
+  svc.warm();
+  assert.equal(svc.setExtraArgs(['--model', 'sonnet']), false);
+  assert.equal(children[0].exitCode, null, 'untouched');
+  assert.equal(svc.setExtraArgs(['--model', 'haiku']), true);
+  assert.equal(children[0].exitCode, 1, 'the old session (old flags) is stopped');
+  assert.deepEqual(svc.getExtraArgs(), ['--model', 'haiku']);
+});
+
+test('warm() sends the warm-up turn first; a real request waits for it and gets only its own text', async () => {
+  const { spawn, children } = fakeSpawn();
+  const svc = new ClaudeCodeCliService(spawn, { warmupPrompt: 'ping', recycleAfterTurns: 1 });
+  svc.warm();
+  await tick();
+  const c = children[0];
+  assert.equal(c.lines[0].message.content.at(-1).text, 'ping');
+  const p = collect(svc.stream({ text: 'real' }));
+  await tick();
+  assert.equal(c.lines.length, 1, 'the real turn queues behind the warm-up');
+  c.say(TEXT.replace('"OK"', '"pong"'), OK);
+  await tick();
+  assert.equal(c.lines[1].message.content.at(-1).text, 'real');
+  c.say(TEXT.replace('"OK"', '"answer"'), OK);
+  assert.equal(await p, 'answer', 'the warm-up reply never leaks into an answer');
+  // recycleAfterTurns: 1 counts only the real turn: it recycles now, not after the warm-up.
+  await tick();
+  assert.equal(children.length, 2, 'recycled after the one real turn');
 });
 
 test('Auto Answer shows Claude Code errors verbatim', () => {

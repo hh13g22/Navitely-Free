@@ -107,6 +107,10 @@ export interface AppSettings {
     groqFastTextMode?: boolean;
     /** Full path to the `claude` CLI; unset = `claude` from PATH (ClaudeCodeCliService). */
     claudeCodePath?: string;
+    /** Claude Code answer session --model (alias or full id). Unset = 'sonnet'; '' = the CLI's own default. */
+    claudeCodeModel?: string;
+    /** Claude Code answer session --effort. Unset = 'low'; '' = the CLI's own default. */
+    claudeCodeEffort?: string;
     codexCliEnabled?: boolean;
     codexCliPath?: string;
     codexCliModel?: string;
