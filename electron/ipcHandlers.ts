@@ -7927,6 +7927,17 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { withoutAudio: appState.isMeetingWithoutAudio() };
   });
 
+  // Auto Answer "Answer faster" (speculative prefetch). Unset = on.
+  safeHandle('get-auto-answer-prefetch', () => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    return SettingsManager.getInstance().get('autoAnswerPrefetch') !== false;
+  });
+  safeHandle('set-auto-answer-prefetch', (_, enabled: boolean) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const ok = SettingsManager.getInstance().set('autoAnswerPrefetch', Boolean(enabled));
+    return ok === false ? { success: false, error: 'settings not saved' } : { success: true };
+  });
+
   safeHandle('get-auto-answer-enabled', async () => {
     return appState.getAutoAnswerEnabled();
   });

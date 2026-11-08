@@ -3861,7 +3861,11 @@ export class AppState {
     // the judge is still deciding.
     noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
     speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
-    prefetchAnswer: (id, text) => this.intelligenceManager.prefetchAutoAnswer(id, text),
+    // Settings › General › Auto Answer › "Answer faster" (unset = on).
+    prefetchAnswer: (id, text) => {
+      if (SettingsManager.getInstance().get('autoAnswerPrefetch') === false) return;
+      this.intelligenceManager.prefetchAutoAnswer(id, text);
+    },
     // The retrieval query's embedding, started when the interviewer stops rather
     // than when the final lands (~0.7 s later). Filler words are stripped as the
     // orchestrator strips them from the question, so the texts line up.

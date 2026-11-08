@@ -1307,6 +1307,9 @@ interface ElectronAPI {
   getMeetingAudioCapture: () => Promise<{ withoutAudio: boolean }>;
   onMeetingAudioCapture: (callback: (data: { withoutAudio: boolean }) => void) => () => void;
   getAutoAnswerEnabled: () => Promise<boolean>;
+  /** Auto Answer "Answer faster": draft the answer while the judge decides. */
+  getAutoAnswerPrefetch: () => Promise<boolean>;
+  setAutoAnswerPrefetch: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -3581,6 +3584,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   getAutoAnswerEnabled: () => ipcRenderer.invoke('get-auto-answer-enabled'),
+  getAutoAnswerPrefetch: () => ipcRenderer.invoke('get-auto-answer-prefetch'),
+  setAutoAnswerPrefetch: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-prefetch', enabled),
   setAutoAnswerEnabled: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-enabled', enabled),
   getDirectAssistEnabled: () => ipcRenderer.invoke('get-direct-assist-enabled'),
   setDirectAssistEnabled: (enabled: boolean) => ipcRenderer.invoke('set-direct-assist-enabled', enabled),

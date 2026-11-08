@@ -735,6 +735,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [exportResult, setExportResult] = useState<string | null>(null);
     const [ambientChatEnabled, setAmbientChatEnabled] = useState(false);
     const [autoAnswerEnabled, setAutoAnswerEnabled] = useState(false);
+    const [autoAnswerPrefetch, setAutoAnswerPrefetch] = useState(true);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -763,6 +764,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getUsageStatistics?.().then((v) => setUsageStatistics(v !== false)).catch(() => { });
             window.electronAPI?.getAmbientChatEnabled?.().then(setAmbientChatEnabled).catch(() => { });
             window.electronAPI?.getAutoAnswerEnabled?.().then(setAutoAnswerEnabled).catch(() => { });
+            (window as any).electronAPI?.getAutoAnswerPrefetch?.().then((v: boolean) => setAutoAnswerPrefetch(v !== false)).catch(() => { });
             window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
@@ -2657,6 +2659,31 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         className={autoAnswerEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />
                                                 </div>
+
+                                                {/* Auto Answer › Answer faster: draft while the judge decides (speculative prefetch). */}
+                                                {autoAnswerEnabled && (
+                                                    <div className="flex items-center justify-between px-4 py-3 pl-[72px]">
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Answer faster')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Starts writing the answer while Natively decides if it was a question. About 1 s sooner; a discarded draft uses a little extra AI usage.')}</p>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={autoAnswerPrefetch}
+                                                            label={t('Answer faster')}
+                                                            onChange={async () => {
+                                                                const previous = autoAnswerPrefetch;
+                                                                setAutoAnswerPrefetch(!previous);
+                                                                try {
+                                                                    const r = await (window as any).electronAPI?.setAutoAnswerPrefetch?.(!previous);
+                                                                    if (r && !r.success) setAutoAnswerPrefetch(previous);
+                                                                } catch {
+                                                                    setAutoAnswerPrefetch(previous);
+                                                                }
+                                                            }}
+                                                            className={autoAnswerPrefetch ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+                                                )}
 
                                                 {/* Ambient AI Chat */}
                                                 <div className="flex items-center justify-between px-4 py-3">

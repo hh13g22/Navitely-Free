@@ -107,6 +107,12 @@ export interface AppSettings {
     groqFastTextMode?: boolean;
     /** Full path to the `claude` CLI; unset = `claude` from PATH (ClaudeCodeCliService). */
     claudeCodePath?: string;
+    /**
+     * Auto Answer "Answer faster": start drafting the answer while the judge
+     * decides (SimpleAutoAnswer prefetch). Unset = on. Measured on Claude Code:
+     * 2.46 s → 1.31 s to the first word; a draft the judge rejects is discarded.
+     */
+    autoAnswerPrefetch?: boolean;
     /** Claude Code answer session --model (alias or full id). Unset = 'sonnet'; '' = the CLI's own default. */
     claudeCodeModel?: string;
     /** Claude Code answer session --effort. Unset = 'low'; '' = the CLI's own default. */
